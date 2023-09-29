@@ -1,17 +1,16 @@
 import argparse
 import json
 
-import tiktoken
-
 from aider import models, prompts
 from aider.dump import dump  # noqa: F401
 from aider.sendchat import simple_send_with_retries
 
 
 class ChatSummary:
-    def __init__(self, model=models.GPT35.name, max_tokens=1024):
-        self.tokenizer = tiktoken.encoding_for_model(model)
+    def __init__(self, model=models.Model.weak_model(), max_tokens=1024):
+        self.tokenizer = model.tokenizer
         self.max_tokens = max_tokens
+        self.model = model
 
     def too_big(self, messages):
         sized = self.tokenize(messages)
@@ -85,7 +84,9 @@ class ChatSummary:
             dict(role="user", content=content),
         ]
 
-        summary = simple_send_with_retries(model=models.GPT35.name, messages=messages)
+        summary = simple_send_with_retries(self.model.name, messages)
+        if summary is None:
+            raise ValueError(f"summarizer unexpectedly failed for {self.model.name}")
         summary = prompts.summary_prefix + summary
 
         return [dict(role="user", content=summary)]
@@ -123,7 +124,7 @@ def main():
 
         assistant.append(line)
 
-    summarizer = ChatSummary(models.GPT35.name)
+    summarizer = ChatSummary(models.Model.weak_model())
     summary = summarizer.summarize(messages[-40:])
     dump(summary)
 

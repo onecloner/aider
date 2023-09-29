@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 
 import git
-import tiktoken
 from prompt_toolkit.completion import Completion
 
 from aider import prompts, voice
@@ -14,6 +13,8 @@ from .dump import dump  # noqa: F401
 
 
 class Commands:
+    voice = None
+
     def __init__(self, io, coder, voice_language=None):
         self.io = io
         self.coder = coder
@@ -22,7 +23,7 @@ class Commands:
             voice_language = None
 
         self.voice_language = voice_language
-        self.tokenizer = tiktoken.encoding_for_model(coder.main_model.name)
+        self.tokenizer = coder.main_model.tokenizer
 
     def is_command(self, inp):
         if inp[0] == "/":
@@ -230,7 +231,7 @@ class Commands:
             return
 
         commits = f"{self.coder.last_aider_commit_hash}~1"
-        diff = self.coder.repo.get_diffs(
+        diff = self.coder.repo.diff_commits(
             self.coder.pretty,
             commits,
             self.coder.last_aider_commit_hash,
@@ -441,11 +442,13 @@ class Commands:
 
     def cmd_voice(self, args):
         "Record and transcribe voice input"
-        v = voice.Voice()
 
-        if not v.is_audio_available():
-            self.io.tool_error("Unable to import `sounddevice`, is portaudio installed?")
-            return
+        if not self.voice:
+            try:
+                self.voice = voice.Voice()
+            except voice.SoundDeviceError:
+                self.io.tool_error("Unable to import `sounddevice`, is portaudio installed?")
+                return
 
         history_iter = self.io.get_input_history()
 
@@ -464,7 +467,7 @@ class Commands:
         history.reverse()
         history = "\n".join(history)
 
-        text = v.record_and_transcribe(history, language=self.voice_language)
+        text = self.voice.record_and_transcribe(history, language=self.voice_language)
         if text:
             self.io.add_to_input_history(text)
             print()
